@@ -6,7 +6,8 @@ login.xlsx
 
 perfil_real/
 
-resultados/
+resultados/*
+!resultados/.gitkeep
 
 .DS_Store
 Thumbs.db
