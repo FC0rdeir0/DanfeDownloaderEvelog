@@ -2,8 +2,6 @@
 __pycache__/
 *.pyc
 
-login.xlsx
-
 perfil_real/
 
 resultados/*

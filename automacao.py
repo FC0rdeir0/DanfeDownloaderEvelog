@@ -1,36 +1,79 @@
-from pathlib import Path
+import os
 import re
+from pathlib import Path
+
 import pandas as pd
+from dotenv import load_dotenv
 from playwright.sync_api import sync_playwright
 
-LOGIN_URL = "https://jadlog.com.br/FractionWeb/login.jad?state=invalid"
+BASE_DIR = Path(__file__).resolve().parent
+ENV_FILE = BASE_DIR / ".env"
+DEFAULT_FRACTION_URL = "https://www.jadlog.com.br/FractionWeb/login.jad?state=invalid"
 
 
-def carregar_credenciais(caminho="login.xlsx"):
-    cred = pd.read_excel(caminho)
-    return str(cred.loc[0, "USER"]), str(cred.loc[0, "PASSWORD"])
+def _carregar_env():
+    load_dotenv(ENV_FILE, override=False)
 
 
-def buscar_chaves(df: pd.DataFrame, usuario: str, senha: str, log=lambda msg: None) -> pd.DataFrame:
+def _valor_obrigatorio(nome):
+    valor = os.getenv(nome, "").strip()
+    if not valor:
+        raise RuntimeError(f"Variável {nome} não informada no arquivo .env")
+    return valor
+
+
+def _valor_bool(nome, padrao=False):
+    valor = os.getenv(nome)
+    if valor is None:
+        return padrao
+
+    valor = valor.strip().lower()
+    if valor in {"1", "true", "t", "yes", "y", "sim", "s"}:
+        return True
+    if valor in {"0", "false", "f", "no", "n", "nao", "não"}:
+        return False
+
+    raise RuntimeError(
+        f"Valor inválido para {nome}: {valor!r}. Use True ou False."
+    )
+
+
+def carregar_config_fraction():
+    _carregar_env()
+
+    url = os.getenv("URL_FRACTION", DEFAULT_FRACTION_URL).strip()
+    usuario = _valor_obrigatorio("FRACTION_USER")
+    senha = _valor_obrigatorio("FRACTION_PASSWORD")
+    headless = _valor_bool("HEADLESS", padrao=True)
+
+    if not url:
+        url = DEFAULT_FRACTION_URL
+
+    return url, usuario, senha, headless
+
+
+def buscar_chaves(df: pd.DataFrame, log=lambda msg: None) -> pd.DataFrame:
+    url_fraction, usuario, senha, headless = carregar_config_fraction()
+
     resultado = df.copy()
     resultado["chave_nfe"] = ""
     resultado["status_fraction"] = "PENDENTE"
     resultado["status_danfe"] = "PENDENTE"
     resultado["mensagem"] = ""
 
-    perfil = Path(__file__).resolve().parent / "perfil_real"
+    perfil = BASE_DIR / "perfil_real"
 
     with sync_playwright() as p:
         context = p.chromium.launch_persistent_context(
             user_data_dir=str(perfil),
-            headless=True,
-            slow_mo=200,
+            headless=headless,
+            slow_mo=0 if headless else 200,
         )
         page = context.pages[0] if context.pages else context.new_page()
 
         try:
             log("🔐 Fazendo login no FractionWeb...")
-            page.goto(LOGIN_URL, wait_until="domcontentloaded", timeout=60000)
+            page.goto(url_fraction, wait_until="domcontentloaded", timeout=60000)
             page.fill("input[name='id_usuario']", usuario)
             page.fill("input[name='id_senha']", senha)
             page.click("input[type='submit']")

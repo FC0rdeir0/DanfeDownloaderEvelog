@@ -1,11 +1,15 @@
 from pathlib import Path
 import base64
+import os
 import time
 
 import pandas as pd
 import requests
+from dotenv import load_dotenv
 
 DEFAULT_API_BASE_URL = "https://api.meudanfe.com.br/v2"
+BASE_DIR = Path(__file__).resolve().parent
+ENV_FILE = BASE_DIR / ".env"
 
 
 HTTP_MESSAGES = {
@@ -18,22 +22,23 @@ HTTP_MESSAGES = {
 }
 
 
-def carregar_config_api(caminho="login.xlsx"):
-    cred = pd.read_excel(caminho)
+def carregar_config_api():
+    load_dotenv(ENV_FILE, override=False)
 
-    if "API_KEY" not in cred.columns or pd.isna(cred.loc[0, "API_KEY"]):
-        raise ValueError("Adicione a coluna API_KEY ao login.xlsx e informe sua Api-Key do Meu DANFE.")
+    api_key = os.getenv("API_KEY_MEUDANFE", "").strip()
+    if not api_key:
+        raise RuntimeError("Variável API_KEY_MEUDANFE não informada no arquivo .env")
 
-    api_key = str(cred.loc[0, "API_KEY"]).strip()
-
-    # API_BASE_URL é opcional. Se estiver vazia, usa a URL oficial da API v2.
-    base_url = DEFAULT_API_BASE_URL
-    if "API_BASE_URL" in cred.columns and not pd.isna(cred.loc[0, "API_BASE_URL"]):
-        valor = str(cred.loc[0, "API_BASE_URL"]).strip()
-        if valor:
-            base_url = valor.rstrip("/")
+    # Mantém o nome URL_MEDANFE conforme o .env definido no projeto.
+    # Também aceita URL_MEUDANFE caso o nome seja corrigido futuramente.
+    base_url = (
+        os.getenv("URL_MEDANFE", "").strip()
+        or os.getenv("URL_MEUDANFE", "").strip()
+        or DEFAULT_API_BASE_URL
+    ).rstrip("/")
 
     return api_key, base_url
+
 
 
 def _mensagem_http(response):
@@ -130,13 +135,12 @@ def _baixar_pdf_quando_disponivel(
 
 def baixar_danfes(
     df: pd.DataFrame,
-    api_key: str,
-    base_url: str = DEFAULT_API_BASE_URL,
     pasta="danfes",
     log=lambda msg: None,
     timeout_processamento=60,
     intervalo_consulta=2,
 ) -> pd.DataFrame:
+    api_key, base_url = carregar_config_api()
     resultado = df.copy()
     destino = Path(pasta)
     destino.mkdir(parents=True, exist_ok=True)
